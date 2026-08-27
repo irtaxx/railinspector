@@ -1,0 +1,5 @@
+requests
+RPi.GPIO
+picamera2
+pyserial
+pynmea2

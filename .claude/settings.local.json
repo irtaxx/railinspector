@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m venv venv)",
+      "Bash(venv/Scripts/python -m pip install -q -r requirements.txt)",
+      "Bash(venv/Scripts/python -c \"import main\")",
+      "Bash(venv/Scripts/python -m uvicorn main:app --host 127.0.0.1 --port 8000)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://127.0.0.1:8000/)",
+      "Bash(curl -s http://127.0.0.1:8000/api/damages)",
+      "Bash(curl -s http://127.0.0.1:8000/api/gps/current)",
+      "Bash(curl -s -X POST http://127.0.0.1:8000/api/gps -d \"lat=-7.9553&lon=112.6146\")",
+      "Bash(python -c ' *)",
+      "Bash(printf '\\\\xff\\\\xd8\\\\xff\\\\xe0dummy')",
+      "Bash(curl -s -X POST http://127.0.0.1:8000/api/damage -F \"lat=-7.9550\" -F \"lon=112.6140\" -F \"keterangan=Retak rel\" -F \"image=@/tmp/test.jpg;type=image/jpeg\")",
+      "Read(//tmp/**)",
+      "Bash(xxd)",
+      "Bash(curl -sv -X POST http://127.0.0.1:8000/api/damage -F \"lat=-7.9550\" -F \"lon=112.6140\" -F \"keterangan=Retak rel\" -F \"image=@/tmp/test.jpg;type=image/jpeg\")",
+      "Bash(curl -s -o /tmp/resp.txt -w \"HTTP:%{http_code}\\\\n\" -X POST http://127.0.0.1:8000/api/damage -F \"lat=-7.9550\" -F \"lon=112.6140\" -F \"keterangan=Retak rel\" -F \"image=@/tmp/test.jpg;type=image/jpeg\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://127.0.0.1:8000/api/damages)",
+      "Bash(venv/Scripts/python -c ' *)",
+      "Bash(venv/Scripts/python -m pip install -q requests)",
+      "Bash(rm -f uploads/*.jpg)",
+      "Bash(powershell -Command 'Get-Process python -ErrorAction SilentlyContinue | Where-Object {$_.MainWindowTitle -eq '\\\\'''\\\\''} | Stop-Process -Force')",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://127.0.0.1:8000/ --max-time 2)",
+      "Bash(powershell -Command 'Get-CimInstance Win32_Process -Filter \"name='\\\\''python.exe'\\\\''\" | Where-Object { $_.CommandLine -like '\\\\''*uvicorn*'\\\\'' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }')"
+    ]
+  }
+}
