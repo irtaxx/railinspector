@@ -609,7 +609,7 @@
     </div>
     <div class="modal-body">
       <button class="reset-trip-btn" id="reset-trip-btn">
-        <i class="fa-solid fa-rotate-left"></i>Reset Perjalanan (Mulai Siklus Baru)
+        <i class="fa-solid fa-rotate-left"></i>Simpan dan Reset Perjalanan (Mulai Siklus Baru)
       </button>
       <div id="trip-list">
         <div class="empty-state"><i class="fa-solid fa-route"></i>Memuat riwayat perjalanan...</div>
@@ -645,7 +645,7 @@
 
   let loriMarker = null;
   const damageMarkers = {};
-  const trailDots = new Set(); // kunci waktu yang sudah digambar sebagai titik posisi lama
+  const trailDots = new Map(); // waktu -> L.circleMarker, biar bisa dihapus lagi saat reset perjalanan
   let hasFitBounds = false;
   let historyPolyline = null; // jalur trip lama yang sedang ditampilkan (mode "lihat jalur")
 
@@ -727,14 +727,14 @@
       const previous = history.slice(0, -1); // posisi terakhir dipakai ikon kereta, bukan dot
       for (const p of previous) {
         if (trailDots.has(p.waktu)) continue;
-        L.circleMarker([p.lat, p.lon], {
+        const dot = L.circleMarker([p.lat, p.lon], {
           radius: 4,
           color: '#00539C',
           weight: 1,
           fillColor: '#00539C',
           fillOpacity: 0.55,
         }).addTo(map);
-        trailDots.add(p.waktu);
+        trailDots.set(p.waktu, dot);
       }
     } catch (e) {
       console.error(e);
@@ -904,13 +904,24 @@
   }
   document.getElementById('history-banner-close').addEventListener('click', clearHistoryView);
 
+  // Hapus jejak GPS (titik-titik biru) trip lama dari peta — kerusakan yang sudah
+  // ditemukan tetap tampil karena kerusakannya sendiri masih ada secara fisik di rel,
+  // cuma jejak perjalanannya yang mulai dari nol lagi.
+  function clearLiveTrail() {
+    for (const dot of trailDots.values()) {
+      map.removeLayer(dot);
+    }
+    trailDots.clear();
+  }
+
   document.getElementById('reset-trip-btn').addEventListener('click', async () => {
-    const yakin = confirm('Reset perjalanan? Trip yang sedang berjalan akan ditutup dan siklus baru dimulai dari awal.');
+    const yakin = confirm('Simpan dan reset perjalanan? Trip yang sedang berjalan akan ditutup dan siklus baru dimulai dari awal.');
     if (!yakin) return;
     const btn = document.getElementById('reset-trip-btn');
     btn.disabled = true;
     try {
       await postJSON('/api/trip/reset');
+      clearLiveTrail();
       await loadTripList();
     } catch (e) {
       alert('Gagal reset perjalanan. Coba lagi.');
