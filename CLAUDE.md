@@ -83,9 +83,13 @@ scheme matching the KAI/Polinema branding. It polls `/api/gps/current`, `/api/gp
 is a single mutable `L.marker` (train icon) moved via `setLatLng`, with its popup showing live
 `speed`/`battery` from the GPS payload (`-` when the client didn't send them — these are real values
 now, not placeholders); earlier positions from `/api/gps/history` are drawn as small `L.circleMarker`
-dots and tracked in a `trailDots` set (keyed by `waktu`) so they're only drawn once — note this trail
-and the "Total Kerusakan" sidebar stat are both all-time/all-trip, not scoped to the current trip.
-Damage pins are diffed against `damageMarkers` (keyed by damage id) the same way.
+dots and tracked in a `trailDots` map (waktu → layer). `updateLoriTrail()` polls `/api/trip/current`
+every cycle and compares its `id` against the cached `currentTripId` — on a mismatch (trip was reset,
+whether from this tab's own reset button or externally, e.g. hardware/another tab) it calls
+`clearLiveTrail()` before re-filtering, so the trail only ever shows the active trip's points, never
+stale ones from a closed trip. The "Total Kerusakan" sidebar stat is still all-time/all-trip by
+design (a damage finding doesn't stop being real just because the trip that found it ended) — only
+the GPS trail is trip-scoped. Damage pins are diffed against `damageMarkers` (keyed by damage id).
 
 Trip log is a separate modal (`#trip-modal-scrim`, opened via the header's "Log Perjalanan" button):
 lists trips from `GET /api/trips`, a "Reset Perjalanan" button that calls `POST /api/trip/reset`

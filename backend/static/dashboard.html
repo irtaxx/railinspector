@@ -648,6 +648,7 @@
   const trailDots = new Map(); // waktu -> L.circleMarker, biar bisa dihapus lagi saat reset perjalanan
   let hasFitBounds = false;
   let historyPolyline = null; // jalur trip lama yang sedang ditampilkan (mode "lihat jalur")
+  let currentTripId = null; // dipakai buat filter jejak GPS supaya cuma tampilkan trip yang aktif
 
   // Popup posisi lori: koordinat + baterai/kecepatan asli dari perangkat GPS
   // (dikirim lewat POST /api/gps, field opsional — tampil "-" kalau belum ada datanya).
@@ -720,11 +721,21 @@
   }
 
   // Titik-titik posisi lori sebelumnya (bukan posisi terkini) digambar sebagai dot kecil.
+  // Jejak ini hanya untuk trip yang sedang aktif — /api/gps/history sendiri berisi semua
+  // trip, jadi kita filter di sini dan otomatis bersihkan kalau trip yang aktif berganti
+  // (baik karena tombol reset di tab ini, atau reset dari perangkat/tab lain).
   async function updateLoriTrail() {
     try {
+      const trip = await fetchJSON('/api/trip/current');
+      if (trip && trip.id && trip.id !== currentTripId) {
+        if (currentTripId !== null) clearLiveTrail(); // bukan load pertama -> trip beneran berganti
+        currentTripId = trip.id;
+      }
+
       const history = await fetchJSON('/api/gps/history');
       if (!Array.isArray(history) || history.length === 0) return;
-      const previous = history.slice(0, -1); // posisi terakhir dipakai ikon kereta, bukan dot
+      const tripPoints = history.filter(p => p.trip_id === currentTripId);
+      const previous = tripPoints.slice(0, -1); // posisi terakhir dipakai ikon kereta, bukan dot
       for (const p of previous) {
         if (trailDots.has(p.waktu)) continue;
         const dot = L.circleMarker([p.lat, p.lon], {
@@ -920,8 +931,9 @@
     const btn = document.getElementById('reset-trip-btn');
     btn.disabled = true;
     try {
-      await postJSON('/api/trip/reset');
+      const result = await postJSON('/api/trip/reset');
       clearLiveTrail();
+      currentTripId = result.data.id; // langsung sinkron, nggak nunggu poll berikutnya
       await loadTripList();
     } catch (e) {
       alert('Gagal reset perjalanan. Coba lagi.');
