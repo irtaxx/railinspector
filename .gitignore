@@ -7,6 +7,7 @@ venv/
 # Data lokal (jangan ikut ke-commit, biar tiap environment punya datanya sendiri)
 backend/database.json
 backend/gps_history.json
+backend/trips.json
 backend/uploads/*
 !backend/uploads/.gitkeep
 

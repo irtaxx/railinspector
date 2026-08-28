@@ -16,31 +16,42 @@ Kirim posisi lori secara berkala (misal tiap 3–5 detik).
 ```json
 {
   "lat": -7.9553,
-  "lon": 112.6146
+  "lon": 112.6146,
+  "speed": 12.5,
+  "battery": 87
 }
 ```
 
-| Field | Tipe  | Wajib | Keterangan            |
-|-------|-------|-------|------------------------|
-| lat   | float | Ya    | Latitude posisi lori   |
-| lon   | float | Ya    | Longitude posisi lori  |
+| Field   | Tipe  | Wajib | Keterangan                                    |
+|---------|-------|-------|-------------------------------------------------|
+| lat     | float | Ya    | Latitude posisi lori                             |
+| lon     | float | Ya    | Longitude posisi lori                            |
+| speed   | float | Tidak | Kecepatan lori saat ini, dalam km/jam            |
+| battery | float | Tidak | Sisa baterai perangkat GPS/ESP32, persentase 0–100 |
+
+`speed` dan `battery` opsional — boleh tidak dikirim kalau ESP32 belum punya sensornya, tapi kirim kalau ada datanya (dipakai di popup posisi lori pada dashboard).
 
 **Contoh (curl):**
 ```bash
 curl -X POST http://187.127.220.242/api/gps \
   -H "Content-Type: application/json" \
-  -d '{"lat": -7.9553, "lon": 112.6146}'
+  -d '{"lat": -7.9553, "lon": 112.6146, "speed": 12.5, "battery": 87}'
 ```
 
 **Response 200:**
 ```json
 {
   "status": "ok",
-  "data": { "lat": -7.9553, "lon": 112.6146, "waktu": "2026-08-28T10:00:00" }
+  "data": {
+    "lat": -7.9553, "lon": 112.6146,
+    "speed": 12.5, "battery": 87,
+    "waktu": "2026-08-28T10:00:00",
+    "trip_id": "850a36a5665a42aa954ad0bdfcec06c2"
+  }
 }
 ```
 
-Tidak perlu kirim timestamp — server yang mencatat waktu terima.
+Tidak perlu kirim timestamp — server yang mencatat waktu terima. `trip_id` juga otomatis dari server, lihat bagian [Log Perjalanan (Trip)](#3-log-perjalanan-trip) di bawah.
 
 ---
 
@@ -106,6 +117,49 @@ requests.post(
     "waktu": "2026-08-28T10:00:00"
   }
 }
+```
+
+---
+
+## 3. Log Perjalanan (Trip)
+
+Satu **trip** = satu siklus perjalanan lori, dari awal sampai di-reset. Berguna untuk mengecek jalur
+yang sudah dilalui dan berapa kerusakan yang ditemukan pada satu putaran perjalanan, tanpa campur
+dengan data trip sebelumnya. Endpoint ini dipakai dari sisi dashboard/admin, bukan dari ESP32/Raspi
+— tapi setiap `POST /api/gps` dan `POST /api/damage` otomatis tercatat ke trip yang sedang aktif.
+
+**Reset perjalanan (mulai siklus baru):**
+```bash
+curl -X POST http://187.127.220.242/api/trip/reset
+```
+Menutup trip yang sedang berjalan dan langsung membuka trip baru. Titik GPS/kerusakan yang dikirim
+setelah ini otomatis masuk ke trip baru.
+
+**Daftar semua trip (ringkasan):**
+```bash
+curl http://187.127.220.242/api/trips
+```
+```json
+[
+  {
+    "id": "850a36a5665a42aa954ad0bdfcec06c2",
+    "waktu_mulai": "2026-08-29T00:45:16",
+    "waktu_selesai": "2026-08-29T02:10:00",
+    "status": "selesai",
+    "jumlah_titik_gps": 214,
+    "jumlah_kerusakan": 3
+  }
+]
+```
+
+**Trip yang sedang berjalan:**
+```bash
+curl http://187.127.220.242/api/trip/current
+```
+
+**Detail satu trip** (jalur GPS lengkap + daftar kerusakan yang ditemukan):
+```bash
+curl http://187.127.220.242/api/trip/850a36a5665a42aa954ad0bdfcec06c2
 ```
 
 ---

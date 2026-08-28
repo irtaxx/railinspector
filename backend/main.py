@@ -12,17 +12,19 @@ import json
 import uuid
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 BASE_DIR = Path(__file__).resolve().parent
 UPLOADS_DIR = BASE_DIR / "uploads"
 DATABASE_FILE = BASE_DIR / "database.json"
 GPS_HISTORY_FILE = BASE_DIR / "gps_history.json"
+TRIPS_FILE = BASE_DIR / "trips.json"
 STATIC_DIR = BASE_DIR / "static"
 
 UPLOADS_DIR.mkdir(exist_ok=True)
@@ -45,6 +47,8 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 class GpsUpdate(BaseModel):
     lat: float
     lon: float
+    speed: Optional[float] = None  # km/jam
+    battery: Optional[float] = Field(default=None, ge=0, le=100)  # persentase baterai perangkat GPS
 
 
 class DamageReport(BaseModel):
@@ -85,6 +89,47 @@ def save_gps(data: dict) -> None:
     _write_json(GPS_HISTORY_FILE, data)
 
 
+def load_trips() -> dict:
+    return _read_json(TRIPS_FILE, {"current_trip_id": None, "trips": []})
+
+
+def save_trips(data: dict) -> None:
+    _write_json(TRIPS_FILE, data)
+
+
+def get_current_trip_id() -> str:
+    """Ambil id perjalanan (trip) yang sedang aktif; buat trip pertama kalau belum ada sama sekali."""
+    trips = load_trips()
+    if trips["current_trip_id"] is None:
+        trip = {
+            "id": uuid.uuid4().hex,
+            "waktu_mulai": datetime.now().isoformat(),
+            "waktu_selesai": None,
+        }
+        trips["trips"].append(trip)
+        trips["current_trip_id"] = trip["id"]
+        save_trips(trips)
+    return trips["current_trip_id"]
+
+
+def find_trip(trips: dict, trip_id: str) -> Optional[dict]:
+    return next((t for t in trips["trips"] if t["id"] == trip_id), None)
+
+
+def trip_summary(trip: dict, gps_points: list, damages: list) -> dict:
+    """Ringkasan satu trip: jumlah titik jalur yang dilalui + jumlah kerusakan yang ditemukan."""
+    trip_gps = [p for p in gps_points if p.get("trip_id") == trip["id"]]
+    trip_damages = [d for d in damages if d.get("trip_id") == trip["id"]]
+    return {
+        "id": trip["id"],
+        "waktu_mulai": trip["waktu_mulai"],
+        "waktu_selesai": trip["waktu_selesai"],
+        "status": "selesai" if trip["waktu_selesai"] else "aktif",
+        "jumlah_titik_gps": len(trip_gps),
+        "jumlah_kerusakan": len(trip_damages),
+    }
+
+
 # ---------- Endpoint: Dashboard ----------
 
 @app.get("/")
@@ -117,6 +162,7 @@ def report_damage(payload: DamageReport):
         "keterangan": payload.keterangan,
         "image": filename,
         "waktu": datetime.now().isoformat(),
+        "trip_id": get_current_trip_id(),
     }
     db["damages"].append(entry)
     save_database(db)
@@ -147,7 +193,14 @@ def delete_damage(damage_id: str):
 def update_gps(payload: GpsUpdate):
     """Menerima update posisi lori terkini dari perangkat GPS."""
     gps = load_gps()
-    point = {"lat": payload.lat, "lon": payload.lon, "waktu": datetime.now().isoformat()}
+    point = {
+        "lat": payload.lat,
+        "lon": payload.lon,
+        "speed": payload.speed,
+        "battery": payload.battery,
+        "waktu": datetime.now().isoformat(),
+        "trip_id": get_current_trip_id(),
+    }
     gps["current"] = point
     gps["history"].append(point)
     save_gps(gps)
@@ -162,8 +215,69 @@ def current_gps():
 
 @app.get("/api/gps/history")
 def gps_history():
-    """Riwayat perjalanan lori."""
+    """Riwayat seluruh posisi lori (semua trip)."""
     return load_gps()["history"]
+
+
+# ---------- Endpoint: Log Perjalanan (Trip) ----------
+#
+# Satu "trip" adalah satu siklus perjalanan lori, dari terakhir kali di-reset
+# sampai reset berikutnya. Dipakai untuk mengecek jalur yang sudah dilalui dan
+# jumlah kerusakan yang ditemukan pada satu siklus, tanpa tercampur data trip lain.
+
+@app.post("/api/trip/reset")
+def reset_trip():
+    """Tutup trip yang sedang berjalan dan mulai trip baru dari awal."""
+    trips = load_trips()
+    current = find_trip(trips, trips["current_trip_id"]) if trips["current_trip_id"] else None
+    if current is not None and current["waktu_selesai"] is None:
+        current["waktu_selesai"] = datetime.now().isoformat()
+
+    new_trip = {
+        "id": uuid.uuid4().hex,
+        "waktu_mulai": datetime.now().isoformat(),
+        "waktu_selesai": None,
+    }
+    trips["trips"].append(new_trip)
+    trips["current_trip_id"] = new_trip["id"]
+    save_trips(trips)
+
+    return {"status": "ok", "data": new_trip}
+
+
+@app.get("/api/trips")
+def list_trips():
+    """Daftar seluruh trip beserta ringkasannya (jumlah titik jalur & kerusakan)."""
+    trips = load_trips()
+    gps_points = load_gps()["history"]
+    damages = load_database()["damages"]
+    return [trip_summary(t, gps_points, damages) for t in trips["trips"]]
+
+
+@app.get("/api/trip/current")
+def current_trip():
+    """Ringkasan trip yang sedang berjalan saat ini."""
+    trip_id = get_current_trip_id()
+    trip = find_trip(load_trips(), trip_id)
+    gps_points = load_gps()["history"]
+    damages = load_database()["damages"]
+    return trip_summary(trip, gps_points, damages)
+
+
+@app.get("/api/trip/{trip_id}")
+def trip_detail(trip_id: str):
+    """Detail satu trip: ringkasan + jalur GPS yang dilalui + daftar kerusakan yang ditemukan."""
+    trips = load_trips()
+    trip = find_trip(trips, trip_id)
+    if trip is None:
+        raise HTTPException(status_code=404, detail="Trip tidak ditemukan")
+
+    gps_points = load_gps()["history"]
+    damages = load_database()["damages"]
+    summary = trip_summary(trip, gps_points, damages)
+    summary["jalur"] = [p for p in gps_points if p.get("trip_id") == trip_id]
+    summary["kerusakan"] = [d for d in damages if d.get("trip_id") == trip_id]
+    return summary
 
 
 if __name__ == "__main__":
