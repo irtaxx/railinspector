@@ -6,15 +6,18 @@ Menerima laporan kerusakan (gambar + lokasi GPS) dari lori inspeksi,
 serta menyimpan dan menyajikan data posisi lori secara real-time
 untuk ditampilkan di dashboard GIS.
 """
+import base64
+import binascii
 import json
 import uuid
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import FastAPI, File, Form, UploadFile, HTTPException
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
 BASE_DIR = Path(__file__).resolve().parent
 UPLOADS_DIR = BASE_DIR / "uploads"
@@ -34,6 +37,21 @@ app.add_middleware(
 )
 
 app.mount("/uploads", StaticFiles(directory=UPLOADS_DIR), name="uploads")
+
+
+# ---------- Skema request (JSON) ----------
+
+class GpsUpdate(BaseModel):
+    lat: float
+    lon: float
+
+
+class DamageReport(BaseModel):
+    lat: float
+    lon: float
+    keterangan: str = ""
+    image_base64: str  # isi gambar di-encode base64 (tanpa prefix "data:image/...;base64,")
+    filename: str = "kerusakan.jpg"  # dipakai untuk menentukan ekstensi file
 
 
 # ---------- Helper penyimpanan JSON ----------
@@ -76,26 +94,26 @@ def dashboard():
 # ---------- Endpoint: Laporan Kerusakan ----------
 
 @app.post("/api/damage")
-async def report_damage(
-    lat: float = Form(...),
-    lon: float = Form(...),
-    keterangan: str = Form(default=""),
-    image: UploadFile = File(...),
-):
-    """Menerima laporan kerusakan dari lori: gambar + lokasi GPS."""
-    ext = Path(image.filename).suffix or ".jpg"
+def report_damage(payload: DamageReport):
+    """Menerima laporan kerusakan dari lori: gambar (base64) + lokasi GPS."""
+    try:
+        image_bytes = base64.b64decode(payload.image_base64, validate=True)
+    except (binascii.Error, ValueError):
+        raise HTTPException(status_code=400, detail="image_base64 tidak valid")
+
+    ext = Path(payload.filename).suffix or ".jpg"
     filename = f"{uuid.uuid4().hex}{ext}"
     filepath = UPLOADS_DIR / filename
 
     with open(filepath, "wb") as f:
-        f.write(await image.read())
+        f.write(image_bytes)
 
     db = load_database()
     entry = {
         "id": uuid.uuid4().hex,
-        "lat": lat,
-        "lon": lon,
-        "keterangan": keterangan,
+        "lat": payload.lat,
+        "lon": payload.lon,
+        "keterangan": payload.keterangan,
         "image": filename,
         "waktu": datetime.now().isoformat(),
     }
@@ -125,10 +143,10 @@ def delete_damage(damage_id: str):
 # ---------- Endpoint: Posisi GPS Lori ----------
 
 @app.post("/api/gps")
-def update_gps(lat: float = Form(...), lon: float = Form(...)):
+def update_gps(payload: GpsUpdate):
     """Menerima update posisi lori terkini dari perangkat GPS."""
     gps = load_gps()
-    point = {"lat": lat, "lon": lon, "waktu": datetime.now().isoformat()}
+    point = {"lat": payload.lat, "lon": payload.lon, "waktu": datetime.now().isoformat()}
     gps["current"] = point
     gps["history"].append(point)
     save_gps(gps)

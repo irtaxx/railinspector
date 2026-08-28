@@ -9,6 +9,7 @@ Perangkat:
 - Pi Camera (picamera2)
 - Push button (GPIO)
 """
+import base64
 import io
 import time
 import threading
@@ -62,7 +63,7 @@ def send_gps_update(lat: float, lon: float):
     try:
         requests.post(
             f"{SERVER_URL}/api/gps",
-            data={"lat": lat, "lon": lon},
+            json={"lat": lat, "lon": lon},
             timeout=5,
         )
         print(f"[GPS] Posisi terkirim: {lat}, {lon}")
@@ -81,15 +82,20 @@ def capture_and_send_damage(camera: Picamera2):
 
     stream = io.BytesIO()
     camera.capture_file(stream, format="jpeg")
-    stream.seek(0)
+    image_base64 = base64.b64encode(stream.getvalue()).decode("ascii")
 
     filename = f"kerusakan_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
 
     try:
         response = requests.post(
             f"{SERVER_URL}/api/damage",
-            data={"lat": lat, "lon": lon, "keterangan": "Kerusakan terdeteksi"},
-            files={"image": (filename, stream, "image/jpeg")},
+            json={
+                "lat": lat,
+                "lon": lon,
+                "keterangan": "Kerusakan terdeteksi",
+                "image_base64": image_base64,
+                "filename": filename,
+            },
             timeout=15,
         )
         response.raise_for_status()
