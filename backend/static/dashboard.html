@@ -262,14 +262,35 @@
     background: var(--surface-2);
     border-color: var(--border);
   }
-  .damage-item img {
+  .damage-item .thumb {
+    position: relative;
     width: 52px;
     height: 52px;
-    object-fit: cover;
     border-radius: 6px;
     flex-shrink: 0;
+    overflow: hidden;
     background: var(--surface-2);
+    cursor: zoom-in;
   }
+  .damage-item .thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .damage-item .thumb-zoom {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(11,37,69,0.5);
+    color: #fff;
+    font-size: 12px;
+    opacity: 0;
+    transition: opacity 0.12s ease;
+  }
+  .damage-item .thumb:hover .thumb-zoom { opacity: 1; }
   .damage-item .info {
     min-width: 0;
     display: flex;
@@ -318,6 +339,7 @@
     border-radius: 6px;
     display: block;
     margin-bottom: 6px;
+    cursor: zoom-in;
   }
   .damage-popup .keterangan {
     font-size: 13px;
@@ -511,6 +533,44 @@
     flex-shrink: 0;
   }
 
+  /* ---------- Lightbox: perbesar foto kerusakan ---------- */
+  .lightbox-scrim {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(11,37,69,0.85);
+    z-index: 3000;
+    align-items: center;
+    justify-content: center;
+    padding: 30px;
+    cursor: zoom-out;
+  }
+  .lightbox-scrim.open { display: flex; }
+  .lightbox-scrim img {
+    max-width: 100%;
+    max-height: 100%;
+    border-radius: 8px;
+    box-shadow: 0 12px 48px rgba(0,0,0,0.5);
+    cursor: default;
+  }
+  .lightbox-close {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.15);
+    border: 1px solid rgba(255,255,255,0.35);
+    color: #fff;
+    font-size: 15px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+  .lightbox-close:hover { background: rgba(255,255,255,0.28); }
+
   /* ---------- Responsive ---------- */
   @media (max-width: 820px) {
     .brand-text .subtitle { display: none; }
@@ -618,6 +678,11 @@
   </div>
 </div>
 
+<div class="lightbox-scrim" id="lightbox-scrim">
+  <button class="lightbox-close" id="lightbox-close" aria-label="Tutup"><i class="fa-solid fa-xmark"></i></button>
+  <img id="lightbox-img" src="" alt="Foto kerusakan (diperbesar)">
+</div>
+
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
   const map = L.map('map', { zoomControl: false }).setView([-7.9553, 112.6146], 15); // default: Malang
@@ -688,6 +753,25 @@
     return res.json();
   }
 
+  // ---------- Lightbox: perbesar foto kerusakan ----------
+  // Dipakai dari daftar kerusakan di sidebar maupun dari popup pin di peta
+  // (lewat atribut onclick, karena konten popup Leaflet dirender sebagai string HTML).
+  function openLightbox(src) {
+    document.getElementById('lightbox-img').src = src;
+    document.getElementById('lightbox-scrim').classList.add('open');
+  }
+  function closeLightbox() {
+    document.getElementById('lightbox-scrim').classList.remove('open');
+    document.getElementById('lightbox-img').src = '';
+  }
+  document.getElementById('lightbox-close').addEventListener('click', closeLightbox);
+  document.getElementById('lightbox-scrim').addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) closeLightbox();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeLightbox();
+  });
+
   function formatWaktu(iso) {
     return new Date(iso).toLocaleString('id-ID', {
       day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
@@ -755,7 +839,7 @@
   function damagePopupHtml(d) {
     return `
       <div class="damage-popup">
-        <img src="/uploads/${d.image}" alt="Foto kerusakan">
+        <img src="/uploads/${d.image}" alt="Foto kerusakan" onclick="openLightbox('/uploads/${d.image}')">
         <div class="keterangan">${d.keterangan || 'Tidak ada keterangan'}</div>
         <div class="waktu"><i class="fa-regular fa-clock"></i>${formatWaktu(d.waktu)}</div>
       </div>
@@ -779,13 +863,23 @@
     const sorted = [...damages].sort((a, b) => new Date(b.waktu) - new Date(a.waktu));
     list.innerHTML = sorted.map(d => `
       <div class="damage-item" data-id="${d.id}">
-        <img src="/uploads/${d.image}" alt="Foto kerusakan" loading="lazy">
+        <div class="thumb" data-src="/uploads/${d.image}">
+          <img src="/uploads/${d.image}" alt="Foto kerusakan" loading="lazy">
+          <span class="thumb-zoom"><i class="fa-solid fa-magnifying-glass-plus"></i></span>
+        </div>
         <div class="info">
           <div class="keterangan">${d.keterangan || 'Tidak ada keterangan'}</div>
           <div class="waktu"><i class="fa-regular fa-clock"></i>${formatWaktu(d.waktu)}</div>
         </div>
       </div>
     `).join('');
+
+    list.querySelectorAll('.thumb').forEach(el => {
+      el.addEventListener('click', (e) => {
+        e.stopPropagation(); // jangan sampai ikut trigger fly-to-map punya .damage-item
+        openLightbox(el.dataset.src);
+      });
+    });
 
     list.querySelectorAll('.damage-item').forEach(el => {
       el.addEventListener('click', () => {
