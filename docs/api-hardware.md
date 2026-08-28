@@ -1,6 +1,6 @@
 # Dokumentasi API — Untuk Programmer ESP32 & Raspberry Pi
 
-Base URL: `http://IP_VPS_KAMU` (ganti sesuai IP/domain server)
+Base URL: `http://187.127.220.242` (ganti sesuai IP/domain server)
 
 ---
 
@@ -18,7 +18,7 @@ Kirim posisi lori secara berkala (misal tiap 3–5 detik).
 
 **Contoh (curl):**
 ```bash
-curl -X POST http://IP_VPS_KAMU/api/gps \
+curl -X POST http://187.127.220.242/api/gps \
   -d "lat=-7.9553" -d "lon=112.6146"
 ```
 
@@ -50,7 +50,7 @@ Dikirim sekali setiap tombol inspektor ditekan.
 
 **Contoh (curl):**
 ```bash
-curl -X POST http://IP_VPS_KAMU/api/damage \
+curl -X POST http://187.127.220.242/api/damage \
   -F "lat=-7.9550" -F "lon=112.6140" \
   -F "keterangan=Retak pada sambungan rel" \
   -F "image=@foto.jpg;type=image/jpeg"
@@ -86,4 +86,4 @@ requests.post(
 - Semua koordinat pakai format desimal (WGS84), contoh: `-7.9553, 112.6146`.
 - Kalau request gagal (server tidak bisa dihubungi / timeout), coba lagi — tidak ada efek samping kalau dikirim ulang.
 - Endpoint lain yang tersedia untuk dicek manual: `GET /api/gps/current`, `GET /api/damages` (lihat data yang sudah masuk).
-- Dashboard hasilnya bisa dilihat langsung di `http://IP_VPS_KAMU/`.
+- Dashboard hasilnya bisa dilihat langsung di `http://187.127.220.242/`.

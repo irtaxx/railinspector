@@ -21,7 +21,7 @@ import RPi.GPIO as GPIO
 from picamera2 import Picamera2
 
 # ---------- Konfigurasi ----------
-SERVER_URL = "http://SERVER_IP:8000"
+SERVER_URL = "http://187.127.220.242"
 GPS_PORT = "/dev/serial0"
 GPS_BAUDRATE = 9600
 BUTTON_PIN = 17
