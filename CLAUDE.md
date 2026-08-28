@@ -42,11 +42,17 @@ each persisted to its own flat JSON file (no database engine):
 - `gps_history.json` — `{current, history}`: `current` is the lori's latest position, overwritten
   on every GPS update; `history` accumulates every point ever received (`{lat, lon, speed, battery,
   waktu, trip_id}` — `speed`/`battery` are optional, sent by the GPS client if available).
-- `trips.json` — `{current_trip_id, trips: [{id, waktu_mulai, waktu_selesai}]}`. A "trip" is one
-  journey cycle of the lori, from the last reset to the next. `get_current_trip_id()` lazily creates
-  the first trip on first use. Every GPS point and damage report gets stamped with the active
-  `trip_id` at write time — trip membership is derived by filtering `gps_history.json`/`database.json`
-  on that field (`trip_summary()`), not by duplicating the data into `trips.json`.
+- `trips.json` — `{current_trip_id, trips: [{id, waktu_mulai, waktu_selesai, log_file}]}`. A "trip"
+  is one journey cycle of the lori, from the last reset to the next. `get_current_trip_id()` lazily
+  creates the first trip on first use. Every GPS point and damage report gets stamped with the active
+  `trip_id` at write time. **While a trip is active**, its data isn't duplicated anywhere — trip
+  membership is derived by filtering `gps_history.json`/`database.json` on that field
+  (`trip_summary()`). **When a trip is closed** (`POST /api/trip/reset`), `write_trip_log()` snapshots
+  that trip's full path + damages into its own file under `trip_logs/` (named
+  `<waktu_mulai>_<id[:8]>.json`, see `make_trip_log_filename()`), and the trip's `log_file` field
+  records that filename. `GET /api/trip/{id}` prefers reading from that sealed snapshot file when
+  present, falling back to live filtering only if the trip is still active (no snapshot yet) or the
+  file went missing.
 
 Requests are all JSON (Pydantic models `GpsUpdate`/`DamageReport`), not multipart — photos are sent
 as base64 (`image_base64`) and decoded server-side before being written to `uploads/`.
@@ -111,8 +117,9 @@ console message — this is intentional, not a bug to "fix" by blocking for a fi
 - API routes live under `/api/` prefix; the dashboard route (`/`), `/uploads`, and `/static` mounts
   are the only exceptions.
 - Persistence is flat JSON files, not a real database — `database.json` for damages, `gps_history.json`
-  for GPS, `trips.json` for trip metadata. Don't introduce a database dependency without discussing it
-  first; the project intentionally keeps deployment simple for a Raspberry Pi + single-server setup.
+  for GPS, `trips.json` for trip metadata, one sealed snapshot file per closed trip under `trip_logs/`.
+  Don't introduce a database dependency without discussing it first; the project intentionally keeps
+  deployment simple for a Raspberry Pi + single-server setup.
 - Uploaded images go in `backend/uploads/`, served statically at `/uploads/<filename>`.
 - Hardware-facing API contract (what ESP32/Raspi programmers integrate against) is documented in
   `docs/api-hardware.md` — keep it in sync when changing request/response shapes.

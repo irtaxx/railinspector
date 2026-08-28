@@ -133,7 +133,9 @@ dengan data trip sebelumnya. Endpoint ini dipakai dari sisi dashboard/admin, buk
 curl -X POST http://187.127.220.242/api/trip/reset
 ```
 Menutup trip yang sedang berjalan dan langsung membuka trip baru. Titik GPS/kerusakan yang dikirim
-setelah ini otomatis masuk ke trip baru.
+setelah ini otomatis masuk ke trip baru. Trip yang baru ditutup otomatis disimpan sebagai satu file
+JSON tersendiri di `backend/trip_logs/` (nama file: `<tanggal>_<jam>_<id-pendek>.json`), jadi setiap
+siklus perjalanan punya arsip lengkapnya sendiri.
 
 **Daftar semua trip (ringkasan):**
 ```bash
@@ -147,7 +149,8 @@ curl http://187.127.220.242/api/trips
     "waktu_selesai": "2026-08-29T02:10:00",
     "status": "selesai",
     "jumlah_titik_gps": 214,
-    "jumlah_kerusakan": 3
+    "jumlah_kerusakan": 3,
+    "log_file": "20260829_021000_850a36a5.json"
   }
 ]
 ```

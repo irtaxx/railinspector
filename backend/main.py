@@ -25,9 +25,11 @@ UPLOADS_DIR = BASE_DIR / "uploads"
 DATABASE_FILE = BASE_DIR / "database.json"
 GPS_HISTORY_FILE = BASE_DIR / "gps_history.json"
 TRIPS_FILE = BASE_DIR / "trips.json"
+TRIP_LOGS_DIR = BASE_DIR / "trip_logs"  # snapshot JSON per trip, dibuat saat trip ditutup/reset
 STATIC_DIR = BASE_DIR / "static"
 
 UPLOADS_DIR.mkdir(exist_ok=True)
+TRIP_LOGS_DIR.mkdir(exist_ok=True)
 
 app = FastAPI(title="RailInspector API")
 
@@ -105,6 +107,7 @@ def get_current_trip_id() -> str:
             "id": uuid.uuid4().hex,
             "waktu_mulai": datetime.now().isoformat(),
             "waktu_selesai": None,
+            "log_file": None,
         }
         trips["trips"].append(trip)
         trips["current_trip_id"] = trip["id"]
@@ -127,7 +130,34 @@ def trip_summary(trip: dict, gps_points: list, damages: list) -> dict:
         "status": "selesai" if trip["waktu_selesai"] else "aktif",
         "jumlah_titik_gps": len(trip_gps),
         "jumlah_kerusakan": len(trip_damages),
+        "log_file": trip.get("log_file"),
     }
+
+
+def make_trip_log_filename(trip: dict) -> str:
+    """Nama file unik untuk snapshot satu trip: tanggal_waktu-mulai + 8 karakter awal id trip."""
+    dt = datetime.fromisoformat(trip["waktu_mulai"])
+    return f"{dt.strftime('%Y%m%d_%H%M%S')}_{trip['id'][:8]}.json"
+
+
+def write_trip_log(trip: dict, gps_points: list, damages: list) -> str:
+    """Simpan snapshot lengkap satu trip (jalur + kerusakan) ke file JSON tersendiri di
+    trip_logs/, dipanggil saat trip ditutup (reset). Return nama filenya."""
+    trip_gps = [p for p in gps_points if p.get("trip_id") == trip["id"]]
+    trip_damages = [d for d in damages if d.get("trip_id") == trip["id"]]
+    snapshot = {
+        "id": trip["id"],
+        "waktu_mulai": trip["waktu_mulai"],
+        "waktu_selesai": trip["waktu_selesai"],
+        "status": "selesai",
+        "jumlah_titik_gps": len(trip_gps),
+        "jumlah_kerusakan": len(trip_damages),
+        "jalur": trip_gps,
+        "kerusakan": trip_damages,
+    }
+    filename = make_trip_log_filename(trip)
+    _write_json(TRIP_LOGS_DIR / filename, snapshot)
+    return filename
 
 
 # ---------- Endpoint: Dashboard ----------
@@ -227,16 +257,21 @@ def gps_history():
 
 @app.post("/api/trip/reset")
 def reset_trip():
-    """Tutup trip yang sedang berjalan dan mulai trip baru dari awal."""
+    """Tutup trip yang sedang berjalan (sekaligus simpan snapshot JSON-nya) dan mulai
+    trip baru dari awal."""
     trips = load_trips()
     current = find_trip(trips, trips["current_trip_id"]) if trips["current_trip_id"] else None
     if current is not None and current["waktu_selesai"] is None:
         current["waktu_selesai"] = datetime.now().isoformat()
+        gps_points = load_gps()["history"]
+        damages = load_database()["damages"]
+        current["log_file"] = write_trip_log(current, gps_points, damages)
 
     new_trip = {
         "id": uuid.uuid4().hex,
         "waktu_mulai": datetime.now().isoformat(),
         "waktu_selesai": None,
+        "log_file": None,
     }
     trips["trips"].append(new_trip)
     trips["current_trip_id"] = new_trip["id"]
@@ -266,11 +301,25 @@ def current_trip():
 
 @app.get("/api/trip/{trip_id}")
 def trip_detail(trip_id: str):
-    """Detail satu trip: ringkasan + jalur GPS yang dilalui + daftar kerusakan yang ditemukan."""
+    """Detail satu trip: ringkasan + jalur GPS yang dilalui + daftar kerusakan yang ditemukan.
+
+    Kalau trip sudah punya snapshot (sudah pernah di-reset/ditutup), datanya dibaca langsung
+    dari file trip_logs/<log_file> — sudah "sealed", tidak berubah lagi. Trip yang masih
+    aktif belum punya snapshot, jadi dihitung langsung (live) dari gps_history.json/database.json.
+    """
     trips = load_trips()
     trip = find_trip(trips, trip_id)
     if trip is None:
         raise HTTPException(status_code=404, detail="Trip tidak ditemukan")
+
+    log_file = trip.get("log_file")
+    if log_file:
+        log_path = TRIP_LOGS_DIR / log_file
+        if log_path.exists():
+            snapshot = _read_json(log_path, {})
+            if snapshot:
+                return snapshot
+        # file snapshot hilang/corrupt -> jatuh ke hitung ulang dari data mentah di bawah
 
     gps_points = load_gps()["history"]
     damages = load_database()["damages"]

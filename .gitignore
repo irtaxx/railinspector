@@ -10,6 +10,8 @@ backend/gps_history.json
 backend/trips.json
 backend/uploads/*
 !backend/uploads/.gitkeep
+backend/trip_logs/*
+!backend/trip_logs/.gitkeep
 
 # OS / editor
 .DS_Store
