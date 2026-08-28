@@ -74,13 +74,19 @@ Endpoints (prefix `/api/`):
 framework) using Leaflet.js + Font Awesome from CDNs, Montserrat font, and a navy/orange color
 scheme matching the KAI/Polinema branding. It polls `/api/gps/current`, `/api/gps/history`, and
 `/api/damages` every 5 seconds (see `poll()` at the bottom of the file). The lori's latest position
-is a single mutable `L.marker` (train icon) moved via `setLatLng`; earlier positions from
-`/api/gps/history` are drawn as small `L.circleMarker` dots and tracked in a `trailDots` set (keyed
-by `waktu`) so they're only drawn once. Damage pins are diffed against `damageMarkers` (keyed by
-damage id) the same way. The lori popup shows lat/lon plus **dummy** battery/speed generated
-client-side (`dummyTelemetry()`) — real `speed`/`battery` values now exist in the GPS API response
-but the dashboard doesn't consume them yet; wire that up instead of the dummy generator if asked to
-make it real. The dashboard does not currently expose trip history/reset UI — that's API-only for now.
+is a single mutable `L.marker` (train icon) moved via `setLatLng`, with its popup showing live
+`speed`/`battery` from the GPS payload (`-` when the client didn't send them — these are real values
+now, not placeholders); earlier positions from `/api/gps/history` are drawn as small `L.circleMarker`
+dots and tracked in a `trailDots` set (keyed by `waktu`) so they're only drawn once — note this trail
+and the "Total Kerusakan" sidebar stat are both all-time/all-trip, not scoped to the current trip.
+Damage pins are diffed against `damageMarkers` (keyed by damage id) the same way.
+
+Trip log is a separate modal (`#trip-modal-scrim`, opened via the header's "Log Perjalanan" button):
+lists trips from `GET /api/trips`, a "Reset Perjalanan" button that calls `POST /api/trip/reset`
+(behind a native `confirm()`), and a per-trip "Lihat Jalur di Peta" action that fetches
+`GET /api/trip/{id}` and draws that trip's path as a dashed orange `L.polyline` (`historyPolyline`)
+with a dismissible banner (`#history-banner`) — it does **not** redraw that trip's damage pins, since
+damages are already shown permanently by the live `updateDamages()` layer regardless of trip.
 
 **Raspberry Pi client (`raspi/damage_reporter.py`)** runs two concurrent loops in one process:
 - A background thread (`gps_reader`) continuously reads NMEA sentences off the serial GPS, updates
