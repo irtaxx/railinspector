@@ -356,7 +356,7 @@
     position: fixed;
     inset: 0;
     background: rgba(11,37,69,0.5);
-    z-index: 30;
+    z-index: 2000;
     align-items: center;
     justify-content: center;
     padding: 20px;
@@ -482,7 +482,7 @@
     top: 12px;
     left: 50%;
     transform: translateX(-50%);
-    z-index: 12;
+    z-index: 1001;
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 20px;
@@ -524,7 +524,7 @@
       max-width: 340px;
       transform: translateX(-100%);
       transition: transform 0.2s ease;
-      z-index: 15;
+      z-index: 1000;
       box-shadow: 4px 0 24px rgba(0,0,0,0.25);
     }
     aside.open { transform: translateX(0); }
@@ -533,7 +533,7 @@
       position: fixed;
       inset: 57px 0 0 0;
       background: rgba(11,37,69,0.45);
-      z-index: 14;
+      z-index: 999;
     }
     .scrim.open { display: block; }
   }
